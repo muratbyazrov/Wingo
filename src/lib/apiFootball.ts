@@ -1,4 +1,17 @@
-const API_BASE_URL = "https://v3.football.api-sports.io";
+const API_BASE_URL =
+  import.meta.env.VITE_API_FOOTBALL_URL ?? "/api/football";
+
+const safeFetch = async (
+  ...args: Parameters<typeof fetch>
+): Promise<Response> => {
+  try {
+    return await fetch(...args);
+  } catch (error) {
+    throw new Error(
+      "Не удалось подключиться к API. Проверьте интернет-соединение и настройки прокси.",
+    );
+  }
+};
 
 const getApiHeaders = () => {
   const apiKey = import.meta.env.VITE_API_FOOTBALL_KEY;
@@ -91,7 +104,7 @@ export type TeamInsights = {
 export const fetchTeamInsights = async (teamName: string): Promise<TeamInsights> => {
   const headers = getApiHeaders();
 
-  const searchResponse = await fetch(
+  const searchResponse = await safeFetch(
     `${API_BASE_URL}/teams?search=${encodeURIComponent(teamName)}`,
     {
       headers,
@@ -111,7 +124,7 @@ export const fetchTeamInsights = async (teamName: string): Promise<TeamInsights>
   const matchedTeam = searchData.response[0];
   const teamId = matchedTeam.team.id;
 
-  const fixturesResponse = await fetch(
+  const fixturesResponse = await safeFetch(
     `${API_BASE_URL}/fixtures?team=${teamId}&last=10`,
     {
       headers,
