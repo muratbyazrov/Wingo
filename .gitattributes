@@ -1,0 +1,24 @@
+* text=auto eol=lf
+
+*.ts text diff=ts
+*.tsx text diff=ts
+*.js text
+*.jsx text
+*.css text
+*.scss text
+*.html text
+*.cjs text
+*.json text
+*.md text
+*.svg text
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+
+package-lock.json merge=ours
+pnpm-lock.yaml merge=ours
+yarn.lock merge=ours
