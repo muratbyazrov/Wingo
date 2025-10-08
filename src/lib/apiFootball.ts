@@ -14,8 +14,17 @@ const safeFetch = async (
 };
 
 const getApiHeaders = () => {
+  const apiKey = import.meta.env.VITE_API_FOOTBALL_KEY;
+
+  if (!apiKey) {
+    throw new Error(
+      "API key is missing. Please set the VITE_API_FOOTBALL_KEY environment variable.",
+    );
+  }
+
   return {
-    accept: "application/json",
+    "x-apisports-key": apiKey,
+    "x-apisports-host": "v3.football.api-sports.io",
   } satisfies HeadersInit;
 };
 
@@ -115,28 +124,8 @@ export const fetchTeamInsights = async (teamName: string): Promise<TeamInsights>
   const matchedTeam = searchData.response[0];
   const teamId = matchedTeam.team.id;
 
-  const seasonsResponse = await safeFetch(
-    `${API_BASE_URL}/teams/seasons?team=${teamId}`,
-    {
-      headers,
-    },
-  );
-
-  if (!seasonsResponse.ok) {
-    throw new Error(`Failed to load team seasons: ${seasonsResponse.statusText}`);
-  }
-
-  const seasonsData: { response: number[] } = await seasonsResponse.json();
-  const seasons = seasonsData.response ?? [];
-
-  if (!seasons.length) {
-    throw new Error("Не удалось определить сезоны команды");
-  }
-
-  const latestSeason = Math.max(...seasons);
-
   const fixturesResponse = await safeFetch(
-    `${API_BASE_URL}/fixtures?team=${teamId}&season=${latestSeason}&last=20`,
+    `${API_BASE_URL}/fixtures?team=${teamId}&last=10`,
     {
       headers,
     },
@@ -147,9 +136,7 @@ export const fetchTeamInsights = async (teamName: string): Promise<TeamInsights>
   }
 
   const fixturesData: { response: FixtureResponse[] } = await fixturesResponse.json();
-  const fixtures = (fixturesData.response ?? []).filter((fixture) =>
-    ["FT", "AET", "PEN", "AWD"].includes(fixture.fixture.status.short),
-  ).slice(0, 10);
+  const fixtures = fixturesData.response ?? [];
 
   const record = fixtures.reduce(
     (acc, fixture) => {
