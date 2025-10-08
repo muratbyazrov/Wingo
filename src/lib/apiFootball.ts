@@ -113,6 +113,39 @@ export type TeamInsights = {
   availableSeasons: number[];
 };
 
+export type TopTeam = {
+  team: {
+    id: number;
+    name: string;
+    logo: string;
+  };
+  league: {
+    id: number;
+    name: string;
+    country: string;
+    logo?: string | null;
+    season: number;
+  };
+  rank: number;
+  points: number;
+  goalsDiff: number;
+  form: string | null;
+  played: number;
+  wins: number;
+  draws: number;
+  losses: number;
+  goalsFor: number;
+  goalsAgainst: number;
+};
+
+export type FetchTopTeamsOptions = {
+  season?: number;
+  leagues?: number[];
+  limitPerLeague?: number;
+};
+
+export const DEFAULT_TOP_TEAM_LEAGUES = [39, 140, 135, 78, 61];
+
 const fetchFixtures = async (
   teamId: number,
   headers: HeadersInit,
@@ -325,4 +358,112 @@ export const fetchTeamInsights = async (
     },
     availableSeasons: filteredSeasons,
   };
+};
+
+export const fetchTopTeams = async (
+  options: FetchTopTeamsOptions = {},
+): Promise<TopTeam[]> => {
+  const headers = getApiHeaders();
+  const {
+    season,
+    leagues = DEFAULT_TOP_TEAM_LEAGUES,
+    limitPerLeague = 6,
+  } = options;
+
+  const resolvedSeason = (() => {
+    if (typeof season === "number") {
+      return season;
+    }
+    const now = new Date();
+    const currentMonth = now.getUTCMonth();
+    const currentYear = now.getUTCFullYear();
+    return currentMonth >= 6 ? currentYear : currentYear - 1;
+  })();
+
+  const aggregated: TopTeam[] = [];
+
+  for (const leagueId of leagues) {
+    const response = await safeFetch(
+      `${API_BASE_URL}/standings?league=${leagueId}&season=${resolvedSeason}`,
+      {
+        headers,
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error(
+        `Failed to load standings for league ${leagueId}: ${response.statusText}`,
+      );
+    }
+
+    const data: {
+      response: Array<{
+        league: {
+          id: number;
+          name: string;
+          country: string;
+          logo?: string | null;
+          season: number;
+          standings?: Array<
+            Array<{
+              rank: number;
+              team: { id: number; name: string; logo: string };
+              points: number;
+              goalsDiff: number;
+              form: string | null;
+              all: {
+                played: number;
+                win: number;
+                draw: number;
+                lose: number;
+                goals: { for: number; against: number };
+              };
+            }>
+          >;
+        };
+      }>;
+    } = await response.json();
+
+    const leagueData = data.response?.[0]?.league;
+    const standingsGroup = leagueData?.standings?.[0];
+
+    if (!leagueData || !standingsGroup?.length) {
+      continue;
+    }
+
+    for (const standing of standingsGroup.slice(0, limitPerLeague)) {
+      aggregated.push({
+        team: standing.team,
+        league: {
+          id: leagueData.id,
+          name: leagueData.name,
+          country: leagueData.country,
+          logo: leagueData.logo ?? null,
+          season: leagueData.season,
+        },
+        rank: standing.rank,
+        points: standing.points,
+        goalsDiff: standing.goalsDiff,
+        form: standing.form ?? null,
+        played: standing.all.played,
+        wins: standing.all.win,
+        draws: standing.all.draw,
+        losses: standing.all.lose,
+        goalsFor: standing.all.goals.for,
+        goalsAgainst: standing.all.goals.against,
+      });
+    }
+  }
+
+  aggregated.sort((a, b) => {
+    if (b.points !== a.points) {
+      return b.points - a.points;
+    }
+    if (b.goalsDiff !== a.goalsDiff) {
+      return b.goalsDiff - a.goalsDiff;
+    }
+    return a.rank - b.rank;
+  });
+
+  return aggregated;
 };
