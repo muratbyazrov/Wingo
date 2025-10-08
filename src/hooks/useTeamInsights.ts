@@ -1,15 +1,22 @@
 import { useQuery } from "@tanstack/react-query";
 
-import { fetchTeamInsights } from "../lib/apiFootball";
+import {
+  DEFAULT_TEAM_INSIGHTS_FILTERS,
+  fetchTeamInsights,
+  type TeamInsightsFilters,
+} from "../lib/apiFootball";
 
-export const useTeamInsights = (teamName: string | null) =>
+export const useTeamInsights = (
+  teamName: string | null,
+  filters: TeamInsightsFilters = DEFAULT_TEAM_INSIGHTS_FILTERS,
+) =>
   useQuery({
-    queryKey: ["team-insights", teamName],
+    queryKey: ["team-insights", teamName, filters],
     queryFn: () => {
       if (!teamName) {
         throw new Error("Не указано название команды");
       }
-      return fetchTeamInsights(teamName);
+      return fetchTeamInsights(teamName, filters);
     },
     enabled: Boolean(teamName),
     staleTime: 1000 * 60 * 5,

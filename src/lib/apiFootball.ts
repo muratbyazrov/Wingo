@@ -88,6 +88,16 @@ export type TeamSearchResponse = {
   };
 };
 
+export type TeamInsightsFilters = {
+  mode: "recent" | "season" | "all";
+  season?: number | null;
+};
+
+export const DEFAULT_TEAM_INSIGHTS_FILTERS: TeamInsightsFilters = {
+  mode: "recent",
+  season: null,
+};
+
 export type TeamInsights = {
   team: TeamSearchResponse["team"];
   venue?: TeamSearchResponse["venue"];
@@ -99,9 +109,34 @@ export type TeamInsights = {
     goalsFor: number;
     goalsAgainst: number;
   };
+  filters: TeamInsightsFilters & { matchesCount: number };
+  availableSeasons: number[];
 };
 
-export const fetchTeamInsights = async (teamName: string): Promise<TeamInsights> => {
+const fetchFixtures = async (
+  teamId: number,
+  headers: HeadersInit,
+  query: string,
+) => {
+  const fixturesResponse = await safeFetch(
+    `${API_BASE_URL}/fixtures?team=${teamId}&${query}`,
+    {
+      headers,
+    },
+  );
+
+  if (!fixturesResponse.ok) {
+    throw new Error(`Failed to load fixtures: ${fixturesResponse.statusText}`);
+  }
+
+  const fixturesData: { response: FixtureResponse[] } = await fixturesResponse.json();
+  return fixturesData.response ?? [];
+};
+
+export const fetchTeamInsights = async (
+  teamName: string,
+  filters: TeamInsightsFilters = DEFAULT_TEAM_INSIGHTS_FILTERS,
+): Promise<TeamInsights> => {
   const headers = getApiHeaders();
 
   const searchResponse = await safeFetch(
@@ -124,19 +159,60 @@ export const fetchTeamInsights = async (teamName: string): Promise<TeamInsights>
   const matchedTeam = searchData.response[0];
   const teamId = matchedTeam.team.id;
 
-  const fixturesResponse = await safeFetch(
-    `${API_BASE_URL}/fixtures?team=${teamId}&last=10`,
+  const seasonsResponse = await safeFetch(
+    `${API_BASE_URL}/teams/seasons?team=${teamId}`,
     {
       headers,
     },
   );
 
-  if (!fixturesResponse.ok) {
-    throw new Error(`Failed to load fixtures: ${fixturesResponse.statusText}`);
+  if (!seasonsResponse.ok) {
+    throw new Error(`Failed to load seasons: ${seasonsResponse.statusText}`);
   }
 
-  const fixturesData: { response: FixtureResponse[] } = await fixturesResponse.json();
-  const fixtures = fixturesData.response ?? [];
+  const seasonsData: { response: number[] } = await seasonsResponse.json();
+  const availableSeasons = Array.isArray(seasonsData.response)
+    ? [...seasonsData.response].sort((a, b) => b - a)
+    : [];
+
+  const { mode, season } = filters;
+
+  let fixtures: FixtureResponse[] = [];
+  let appliedSeason: number | null = null;
+
+  if (mode === "season") {
+    const preferredSeason = season ?? availableSeasons[0] ?? null;
+    const seasonToLoad =
+      preferredSeason && availableSeasons.includes(preferredSeason)
+        ? preferredSeason
+        : availableSeasons[0] ?? null;
+
+    appliedSeason = seasonToLoad ?? null;
+
+    if (seasonToLoad) {
+      fixtures = await fetchFixtures(teamId, headers, `season=${seasonToLoad}`);
+    } else {
+      fixtures = await fetchFixtures(teamId, headers, "last=10");
+    }
+  } else if (mode === "all") {
+    if (availableSeasons.length === 0) {
+      fixtures = await fetchFixtures(teamId, headers, "last=10");
+    } else {
+      const fixturesBySeason: FixtureResponse[][] = [];
+
+      for (const seasonYear of availableSeasons) {
+        const seasonFixtures = await fetchFixtures(teamId, headers, `season=${seasonYear}`);
+        fixturesBySeason.push(seasonFixtures);
+      }
+
+      fixtures = fixturesBySeason.flat();
+      fixtures.sort((a, b) => new Date(b.fixture.date).getTime() - new Date(a.fixture.date).getTime());
+    }
+    appliedSeason = null;
+  } else {
+    fixtures = await fetchFixtures(teamId, headers, "last=10");
+    appliedSeason = null;
+  }
 
   const record = fixtures.reduce(
     (acc, fixture) => {
@@ -168,5 +244,11 @@ export const fetchTeamInsights = async (teamName: string): Promise<TeamInsights>
     venue: matchedTeam.venue ?? undefined,
     fixtures,
     record,
+    filters: {
+      mode,
+      season: appliedSeason,
+      matchesCount: fixtures.length,
+    },
+    availableSeasons,
   };
 };
