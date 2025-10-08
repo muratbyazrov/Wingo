@@ -115,8 +115,28 @@ export const fetchTeamInsights = async (teamName: string): Promise<TeamInsights>
   const matchedTeam = searchData.response[0];
   const teamId = matchedTeam.team.id;
 
+  const seasonsResponse = await safeFetch(
+    `${API_BASE_URL}/teams/seasons?team=${teamId}`,
+    {
+      headers,
+    },
+  );
+
+  if (!seasonsResponse.ok) {
+    throw new Error(`Failed to load team seasons: ${seasonsResponse.statusText}`);
+  }
+
+  const seasonsData: { response: number[] } = await seasonsResponse.json();
+  const seasons = seasonsData.response ?? [];
+
+  if (!seasons.length) {
+    throw new Error("Не удалось определить сезоны команды");
+  }
+
+  const latestSeason = Math.max(...seasons);
+
   const fixturesResponse = await safeFetch(
-    `${API_BASE_URL}/fixtures?team=${teamId}&last=10`,
+    `${API_BASE_URL}/fixtures?team=${teamId}&season=${latestSeason}&last=20`,
     {
       headers,
     },
@@ -127,7 +147,9 @@ export const fetchTeamInsights = async (teamName: string): Promise<TeamInsights>
   }
 
   const fixturesData: { response: FixtureResponse[] } = await fixturesResponse.json();
-  const fixtures = fixturesData.response ?? [];
+  const fixtures = (fixturesData.response ?? []).filter((fixture) =>
+    ["FT", "AET", "PEN", "AWD"].includes(fixture.fixture.status.short),
+  ).slice(0, 10);
 
   const record = fixtures.reduce(
     (acc, fixture) => {
