@@ -5,10 +5,19 @@ type TeamSummaryProps = {
 };
 
 const TeamSummary: React.FC<TeamSummaryProps> = ({ insights }) => {
-  const { team, venue, record } = insights;
+  const { team, venue, record, filters } = insights;
   const winRate = insights.fixtures.length
     ? Math.round((record.wins / insights.fixtures.length) * 100)
     : 0;
+  const filterLabel = (() => {
+    if (filters.mode === "all") {
+      return "Все доступные сезоны";
+    }
+    if (filters.mode === "season") {
+      return filters.season ? `Сезон ${filters.season}` : "Сезон недоступен";
+    }
+    return "Последние 10 матчей";
+  })();
 
   return (
     <section className="grid grid-cols-1 gap-6 rounded-3xl bg-gradient-to-br from-slate-900/90 via-slate-900/60 to-slate-900/30 p-6 shadow-2xl shadow-primary-900/30 md:grid-cols-[1.4fr_1fr]">
@@ -40,16 +49,28 @@ const TeamSummary: React.FC<TeamSummaryProps> = ({ insights }) => {
           </div>
         </div>
         <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs uppercase tracking-widest text-slate-400">Разница мячей</p>
-              <p className="mt-1 text-xl font-semibold text-white">
-                {record.goalsFor} : {record.goalsAgainst}
-              </p>
+          <div className="flex flex-col gap-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs uppercase tracking-widest text-slate-400">Разница мячей</p>
+                <p className="mt-1 text-xl font-semibold text-white">
+                  {record.goalsFor} : {record.goalsAgainst}
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="text-xs uppercase tracking-widest text-slate-400">Winrate</p>
+                <p className="mt-1 text-xl font-semibold text-primary-300">{winRate}%</p>
+              </div>
             </div>
-            <div className="text-right">
-              <p className="text-xs uppercase tracking-widest text-slate-400">Winrate</p>
-              <p className="mt-1 text-xl font-semibold text-primary-300">{winRate}%</p>
+            <div className="border-t border-slate-800 pt-4">
+              <p className="text-xs uppercase tracking-widest text-slate-400">Диапазон данных</p>
+              <p className="mt-1 text-sm text-slate-200">{filterLabel}</p>
+              <p className="text-xs text-slate-500">
+                Матчей в выборке: {filters.matchesCount}
+                {filters.matchesCount === 0
+                  ? ". Попробуйте выбрать другой сезон или режим выборки."
+                  : ""}
+              </p>
             </div>
           </div>
         </div>

@@ -2,16 +2,25 @@ import { useState } from "react";
 
 import FixturesList from "./components/FixturesList";
 import RecordChart from "./components/RecordChart";
+import TeamFilters from "./components/TeamFilters";
 import TeamSearchForm, { type TeamSearchFormValues } from "./components/TeamSearchForm";
 import TeamSummary from "./components/TeamSummary";
 import { useTeamInsights } from "./hooks/useTeamInsights";
+import { DEFAULT_TEAM_INSIGHTS_FILTERS, type TeamInsightsFilters } from "./lib/apiFootball";
 
 const App: React.FC = () => {
+  const createDefaultFilters = () => ({ ...DEFAULT_TEAM_INSIGHTS_FILTERS });
   const [teamName, setTeamName] = useState<string | null>(null);
-  const { data, isLoading, isError, error, isFetching } = useTeamInsights(teamName);
+  const [filters, setFilters] = useState<TeamInsightsFilters>(createDefaultFilters);
+  const { data, isLoading, isError, error, isFetching } = useTeamInsights(teamName, filters);
 
   const handleSubmit = ({ teamName: submittedTeam }: TeamSearchFormValues) => {
     setTeamName(submittedTeam.trim());
+    setFilters(createDefaultFilters());
+  };
+
+  const handleFiltersChange = (nextFilters: TeamInsightsFilters) => {
+    setFilters(nextFilters);
   };
 
   return (
@@ -28,6 +37,15 @@ const App: React.FC = () => {
         </header>
 
         <TeamSearchForm isLoading={isLoading || isFetching} onSubmit={handleSubmit} initialTeam={teamName ?? undefined} />
+
+        {teamName ? (
+          <TeamFilters
+            availableSeasons={data?.availableSeasons ?? []}
+            filters={filters}
+            onChange={handleFiltersChange}
+            isLoading={isLoading || isFetching}
+          />
+        ) : null}
 
         {isError ? (
           <div className="rounded-2xl border border-rose-500/40 bg-rose-500/10 p-4 text-sm text-rose-200">
