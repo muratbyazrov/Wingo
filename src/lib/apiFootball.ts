@@ -13,6 +13,67 @@ const safeFetch = async (
   }
 };
 
+type ApiFootballResponse<T> = {
+  response: T;
+  errors?: unknown;
+};
+
+const extractErrorMessages = (errors: ApiFootballResponse<unknown>["errors"]) => {
+  if (!errors) {
+    return [] as string[];
+  }
+
+  if (typeof errors === "string") {
+    return errors.trim() ? [errors] : [];
+  }
+
+  if (Array.isArray(errors)) {
+    return errors
+      .flatMap((item) => (typeof item === "string" ? item : null))
+      .filter((item): item is string => Boolean(item && item.trim()))
+      .map((item) => item.trim());
+  }
+
+  if (typeof errors === "object") {
+    return Object.values(errors as Record<string, unknown>)
+      .flatMap((value) => {
+        if (typeof value === "string") {
+          return value.trim() ? [value.trim()] : [];
+        }
+
+        if (Array.isArray(value)) {
+          return value
+            .flatMap((item) => (typeof item === "string" ? item.trim() : null))
+            .filter((item): item is string => Boolean(item));
+        }
+
+        return [] as string[];
+      })
+      .filter(Boolean);
+  }
+
+  return [] as string[];
+};
+
+const enhanceAuthErrorMessage = (message: string) => {
+  if (/(api[- ]?key|token)/i.test(message)) {
+    return `${message} Убедитесь, что заданы переменные окружения VITE_API_FOOTBALL_KEY и при необходимости VITE_API_FOOTBALL_URL.`;
+  }
+
+  return message;
+};
+
+const getApiErrorMessage = (data: ApiFootballResponse<unknown>) => {
+  const messages = extractErrorMessages(data?.errors);
+
+  if (messages.length === 0) {
+    return null;
+  }
+
+  const combined = messages.join(" ");
+  return enhanceAuthErrorMessage(combined);
+};
+
 const getApiHeaders = () => {
   const apiKey = import.meta.env.VITE_API_FOOTBALL_KEY;
 
@@ -162,7 +223,13 @@ const fetchFixtures = async (
     throw new Error(`Failed to load fixtures: ${fixturesResponse.statusText}`);
   }
 
-  const fixturesData: { response: FixtureResponse[] } = await fixturesResponse.json();
+  const fixturesData: ApiFootballResponse<FixtureResponse[]> = await fixturesResponse.json();
+  const apiError = getApiErrorMessage(fixturesData);
+
+  if (apiError) {
+    throw new Error(`Failed to load fixtures: ${apiError}`);
+  }
+
   return fixturesData.response ?? [];
 };
 
@@ -233,7 +300,13 @@ export const fetchTeamInsights = async (
       throw new Error(`Failed to search for team: ${response.statusText}`);
     }
 
-    const data: { response: TeamSearchResponse[] } = await response.json();
+    const data: ApiFootballResponse<TeamSearchResponse[]> = await response.json();
+    const apiError = getApiErrorMessage(data);
+
+    if (apiError) {
+      throw new Error(`Failed to search for team: ${apiError}`);
+    }
+
     return Array.isArray(data.response) ? data.response : [];
   };
 
@@ -264,7 +337,13 @@ export const fetchTeamInsights = async (
     throw new Error(`Failed to load seasons: ${seasonsResponse.statusText}`);
   }
 
-  const seasonsData: { response: number[] } = await seasonsResponse.json();
+  const seasonsData: ApiFootballResponse<number[]> = await seasonsResponse.json();
+  const seasonsError = getApiErrorMessage(seasonsData);
+
+  if (seasonsError) {
+    throw new Error(`Failed to load seasons: ${seasonsError}`);
+  }
+
   const availableSeasons = Array.isArray(seasonsData.response)
     ? [...seasonsData.response].sort((a, b) => b - a)
     : [];
@@ -396,8 +475,8 @@ export const fetchTopTeams = async (
       );
     }
 
-    const data: {
-      response: Array<{
+    const data: ApiFootballResponse<
+      Array<{
         league: {
           id: number;
           name: string;
@@ -421,8 +500,13 @@ export const fetchTopTeams = async (
             }>
           >;
         };
-      }>;
-    } = await response.json();
+      }>
+    > = await response.json();
+    const standingsError = getApiErrorMessage(data);
+
+    if (standingsError) {
+      throw new Error(`Failed to load standings for league ${leagueId}: ${standingsError}`);
+    }
 
     const leagueData = data.response?.[0]?.league;
     const standingsGroup = leagueData?.standings?.[0];
