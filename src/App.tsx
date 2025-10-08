@@ -54,7 +54,7 @@ const App: React.FC = () => {
         ) : null}
 
         <footer className="mt-6 text-center text-xs text-slate-500">
-          Источник данных: API-FOOTBALL. Не забудьте указать ключ в <code className="rounded bg-slate-800 px-2 py-1">.env</code> файле.
+          Источник данных: API-FOOTBALL.
         </footer>
       </div>
     </div>
