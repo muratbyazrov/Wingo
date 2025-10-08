@@ -139,24 +139,85 @@ export const fetchTeamInsights = async (
 ): Promise<TeamInsights> => {
   const headers = getApiHeaders();
 
-  const searchResponse = await safeFetch(
-    `${API_BASE_URL}/teams?search=${encodeURIComponent(teamName)}`,
-    {
-      headers,
-    },
-  );
+  const transliterate = (source: string): string => {
+    const map: Record<string, string> = {
+      а: "a",
+      б: "b",
+      в: "v",
+      г: "g",
+      д: "d",
+      е: "e",
+      ё: "e",
+      ж: "zh",
+      з: "z",
+      и: "i",
+      й: "y",
+      к: "k",
+      л: "l",
+      м: "m",
+      н: "n",
+      о: "o",
+      п: "p",
+      р: "r",
+      с: "s",
+      т: "t",
+      у: "u",
+      ф: "f",
+      х: "kh",
+      ц: "ts",
+      ч: "ch",
+      ш: "sh",
+      щ: "shch",
+      ъ: "",
+      ы: "y",
+      ь: "",
+      э: "e",
+      ю: "yu",
+      я: "ya",
+    };
 
-  if (!searchResponse.ok) {
-    throw new Error(`Failed to search for team: ${searchResponse.statusText}`);
+    return source
+      .split("")
+      .map((char) => {
+        const lower = char.toLowerCase();
+        const replacement = map[lower];
+
+        if (!replacement) {
+          return char;
+        }
+
+        return lower === char ? replacement : replacement.charAt(0).toUpperCase() + replacement.slice(1);
+      })
+      .join("");
+  };
+
+  const searchTeam = async (query: string) => {
+    const response = await safeFetch(`${API_BASE_URL}/teams?search=${encodeURIComponent(query)}`, {
+      headers,
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to search for team: ${response.statusText}`);
+    }
+
+    const data: { response: TeamSearchResponse[] } = await response.json();
+    return Array.isArray(data.response) ? data.response : [];
+  };
+
+  let searchResults = await searchTeam(teamName);
+
+  if (searchResults.length === 0 && /[А-Яа-яЁё]/.test(teamName)) {
+    const transliterated = transliterate(teamName);
+    if (transliterated.trim() && transliterated !== teamName) {
+      searchResults = await searchTeam(transliterated);
+    }
   }
 
-  const searchData: { response: TeamSearchResponse[] } = await searchResponse.json();
-
-  if (!Array.isArray(searchData.response) || searchData.response.length === 0) {
+  if (searchResults.length === 0) {
     throw new Error("Команда не найдена. Попробуйте уточнить название.");
   }
 
-  const matchedTeam = searchData.response[0];
+  const matchedTeam = searchResults[0];
   const teamId = matchedTeam.team.id;
 
   const seasonsResponse = await safeFetch(
@@ -175,33 +236,46 @@ export const fetchTeamInsights = async (
     ? [...seasonsData.response].sort((a, b) => b - a)
     : [];
 
+  const seasonAvailability: Array<{ season: number; hasFixtures: boolean }> = [];
+  const seasonFixturesCache = new Map<number, FixtureResponse[]>();
+
+  for (const seasonYear of availableSeasons) {
+    const fixturesForSeason = await fetchFixtures(teamId, headers, `season=${seasonYear}`);
+    seasonFixturesCache.set(seasonYear, fixturesForSeason);
+    seasonAvailability.push({ season: seasonYear, hasFixtures: fixturesForSeason.length > 0 });
+  }
+
+  const filteredSeasons = seasonAvailability
+    .filter(({ hasFixtures }) => hasFixtures)
+    .map(({ season }) => season);
+
   const { mode, season } = filters;
 
   let fixtures: FixtureResponse[] = [];
   let appliedSeason: number | null = null;
 
   if (mode === "season") {
-    const preferredSeason = season ?? availableSeasons[0] ?? null;
+    const preferredSeason = season ?? filteredSeasons[0] ?? null;
     const seasonToLoad =
-      preferredSeason && availableSeasons.includes(preferredSeason)
+      preferredSeason && filteredSeasons.includes(preferredSeason)
         ? preferredSeason
-        : availableSeasons[0] ?? null;
+        : filteredSeasons[0] ?? null;
 
     appliedSeason = seasonToLoad ?? null;
 
     if (seasonToLoad) {
-      fixtures = await fetchFixtures(teamId, headers, `season=${seasonToLoad}`);
+      fixtures = seasonFixturesCache.get(seasonToLoad) ?? [];
     } else {
       fixtures = await fetchFixtures(teamId, headers, "last=10");
     }
   } else if (mode === "all") {
-    if (availableSeasons.length === 0) {
+    if (filteredSeasons.length === 0) {
       fixtures = await fetchFixtures(teamId, headers, "last=10");
     } else {
       const fixturesBySeason: FixtureResponse[][] = [];
 
-      for (const seasonYear of availableSeasons) {
-        const seasonFixtures = await fetchFixtures(teamId, headers, `season=${seasonYear}`);
+      for (const seasonYear of filteredSeasons) {
+        const seasonFixtures = seasonFixturesCache.get(seasonYear) ?? [];
         fixturesBySeason.push(seasonFixtures);
       }
 
@@ -249,6 +323,6 @@ export const fetchTeamInsights = async (
       season: appliedSeason,
       matchesCount: fixtures.length,
     },
-    availableSeasons,
+    availableSeasons: filteredSeasons,
   };
 };
