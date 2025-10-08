@@ -1,5 +1,4 @@
-const API_BASE_URL =
-  import.meta.env.VITE_API_FOOTBALL_URL ?? "/api/football";
+const API_BASE_URL = "/api";
 
 const safeFetch = async (
   ...args: Parameters<typeof fetch>
@@ -14,17 +13,8 @@ const safeFetch = async (
 };
 
 const getApiHeaders = () => {
-  const apiKey = import.meta.env.VITE_API_FOOTBALL_KEY;
-
-  if (!apiKey) {
-    throw new Error(
-      "API key is missing. Please set the VITE_API_FOOTBALL_KEY environment variable.",
-    );
-  }
-
   return {
-    "x-apisports-key": apiKey,
-    "x-apisports-host": "v3.football.api-sports.io",
+    accept: "application/json",
   } satisfies HeadersInit;
 };
 
