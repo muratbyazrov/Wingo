@@ -1,4 +1,5 @@
-const API_BASE_URL = "/api";
+const API_BASE_URL =
+  import.meta.env.VITE_API_FOOTBALL_URL ?? "/api/football";
 
 const safeFetch = async (
   ...args: Parameters<typeof fetch>
