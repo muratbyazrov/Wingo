@@ -115,19 +115,56 @@ export const fetchTeamInsights = async (teamName: string): Promise<TeamInsights>
   const matchedTeam = searchData.response[0];
   const teamId = matchedTeam.team.id;
 
-  const fixturesResponse = await safeFetch(
-    `${API_BASE_URL}/fixtures?team=${teamId}&last=10`,
+  const seasonsResponse = await safeFetch(
+    `${API_BASE_URL}/teams/seasons?team=${teamId}`,
     {
       headers,
     },
   );
 
-  if (!fixturesResponse.ok) {
-    throw new Error(`Failed to load fixtures: ${fixturesResponse.statusText}`);
+  if (!seasonsResponse.ok) {
+    throw new Error(`Failed to load team seasons: ${seasonsResponse.statusText}`);
   }
 
-  const fixturesData: { response: FixtureResponse[] } = await fixturesResponse.json();
-  const fixtures = fixturesData.response ?? [];
+  const seasonsData: { response: number[] } = await seasonsResponse.json();
+  const seasons = seasonsData.response ?? [];
+
+  if (!seasons.length) {
+    throw new Error("Не удалось определить сезоны команды");
+  }
+
+  const sortedSeasons = [...seasons].sort((a, b) => b - a);
+  let fixtures: FixtureResponse[] = [];
+  let selectedSeason: number | undefined;
+
+  for (const season of sortedSeasons) {
+    const fixturesResponse = await safeFetch(
+      `${API_BASE_URL}/fixtures?team=${teamId}&season=${season}&last=50`,
+      {
+        headers,
+      },
+    );
+
+    if (!fixturesResponse.ok) {
+      throw new Error(`Failed to load fixtures: ${fixturesResponse.statusText}`);
+    }
+
+    const fixturesData: { response: FixtureResponse[] } = await fixturesResponse.json();
+    fixtures = (fixturesData.response ?? []).filter((fixture) => {
+      const { goals } = fixture;
+      return goals.home !== null && goals.away !== null;
+    });
+
+    if (fixtures.length) {
+      selectedSeason = season;
+      fixtures = fixtures.slice(0, 10);
+      break;
+    }
+  }
+
+  if (!fixtures.length || selectedSeason === undefined) {
+    throw new Error("Не удалось найти сыгранные матчи команды");
+  }
 
   const record = fixtures.reduce(
     (acc, fixture) => {
